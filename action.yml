@@ -26,5 +26,5 @@ inputs:
     description: 'Comma separated list of columns to ignore. If a card/pull request is already in one of these columns, it will not be moved. Use `*` to ignore all columns'
     required: false
 runs:
-  using: 'node12'
+  using: 'node20'
   main: 'index.js'
