@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Ready for QA
-      uses: pauldruziak/move-labeled-or-milestoned-pull-request@v1.0.2
+      uses: Gardenette/move-labeled-issue@v1.0
       with:
         action-token: "${{ secrets.MY_TOKEN }}"
         project-url: "https://github.com/orgs/github/projects/1"
@@ -46,28 +46,28 @@ jobs:
         label-name: "qa"
         columns-to-ignore: "QA in progress,QA passed,QA failed"
     - name: QA in progress
-      uses: pauldruziak/move-labeled-or-milestoned-pull-request@v1.0.2
+      uses: Gardenette/move-labeled-issue@v1.0
       with:
         action-token: "${{ secrets.MY_TOKEN }}"
         project-url: "https://github.com/orgs/github/projects/1"
         column-name: "QA in progress"
         label-name: "qa in progress"
     - name: QA passed
-      uses: pauldruziak/move-labeled-or-milestoned-pull-request@v1.0.2
+      uses: Gardenette/move-labeled-issue@v1.0
       with:
         action-token: "${{ secrets.MY_TOKEN }}"
         project-url: "https://github.com/orgs/github/projects/1"
         column-name: "QA passed"
         label-name: "qa passed"
     - name: QA failed
-      uses: pauldruziak/move-labeled-or-milestoned-pull-request@v1.0.2
+      uses: Gardenette/move-labeled-issue@v1.0
       with:
         action-token: "${{ secrets.MY_TOKEN }}"
         project-url: "https://github.com/orgs/github/projects/1"
         column-name: "QA failed"
         label-name: "qa failed"
     - name: WIP
-      uses: pauldruziak/move-labeled-or-milestoned-pull-request@v1.0.2
+      uses: Gardenette/move-labeled-issue@v1.0
       with:
         action-token: "${{ secrets.MY_TOKEN }}"
         project-url: "https://github.com/orgs/github/projects/1"
@@ -88,7 +88,7 @@ jobs:
   Move_Milestoned_Issue_On_Project_Board:
     runs-on: ubuntu-latest
     steps:
-    - uses: pauldruziak/move-labeled-or-milestoned-pull-request@v1.0.2
+    - uses: Gardenette/move-labeled-issue@v1.0
       with:
         action-token: "${{ secrets.MY_TOKEN }}"
         project-url: "https://github.com/orgs/github/projects/1"
