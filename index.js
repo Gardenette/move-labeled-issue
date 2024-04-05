@@ -9,7 +9,6 @@ async function run() {
     const labelName = core.getInput("label-name");
     const milestoneName = core.getInput("milestone-name");
     const ignoreList = core.getInput("columns-to-ignore");
-    const deleteCard = core.getInput("delete-card");
     const octokit = new github.GitHub(myToken);
     const context = github.context;
 
@@ -20,33 +19,35 @@ async function run() {
         throw new Error("label-name and milestone-name cannot both be set");
     }
 
-    if(deleteCard != "true" && !columnName){
-        throw new Error("one of delete-card and column-name must be set");
-    }
-    else if (deleteCard == "true" && columnName){
-        throw new Error("delete-card and column-name cannot both be set");
+    var found = false;
+    var objectType;
+    var baseObject;
+
+    if (context.payload.issue) {
+        baseObject = context.payload.issue;
+        objectType = "Issue";
+    } else if (context.payload.pull_request) {
+        baseObject = context.payload.pull_request;
+        objectType = "PullRequest";
     }
 
-    var found = false;
-    if (labelName == "*"){
-        found = true;
-    } else if(labelName){
-        context.payload.pull_request.labels.forEach(function(item){
+    if(baseObject && labelName){
+        baseObject.labels.forEach(function(item){
             if(labelName == item.name){
                 found = true;
             }
         });
     }
 
-    if(milestoneName){
-        if(context.payload.pull_request.milestone && context.payload.pull_request.milestone.title == milestoneName){
+    if(baseObject && milestoneName){
+        if(baseObject.milestone && baseObject.milestone.title == milestoneName){
             found = true;
         }
     }
 
     if(found){
-        // get the columnId for the project where the pull request should be added/moved
-        var info = await tryGetColumnAndCardInformation(columnName, projectUrl, myToken, context.payload.pull_request.id);
+        // get the columnId for the project where the issue should be added/moved
+        var info = await tryGetColumnAndCardInformation(columnName, projectUrl, myToken, baseObject.id);
         var columnId = info[0];
         var cardId = info[1];
         var currentColumn = info[2];
@@ -57,43 +58,38 @@ async function run() {
         if (ignoreList){
             skip = ignoreList.split(",");
         }
-
+        
         if (cardId != null && (ignoreList == "*" || skip.includes(currentColumn))){
             // card is present in a column that we want to ignore, don't move or do anything
-            return `Card exists for pull request in column ${currentColumn}. Column specified to be ignored, not moving pull request.`;
+            return `Card exists for issue in column ${currentColumn}. Column specified to be ignored, not moving issue.`;
         }
         else if (cardId != null){
-            // card already exists for the pull request
-            if (deleteCard == "true"){
-                // delete card from the project
-                return await deleteExistingCard(octokit, columnId, cardId);
-            } else {
-                // move card to the appropriate column
-                return await moveExistingCard(octokit, columnId, cardId);
-            }
-        } else if (deleteCard != "true") {
+            // card already exists for the issue
+            // move card to the appropriate column
+            return await moveExistingCard(octokit, columnId, cardId);
+        } else {
             // card is not present
             // create new card in the appropriate column
-            return await createNewCard(octokit, columnId, context.payload.pull_request.id);
+            return await createNewCard(octokit, columnId, baseObject.id, objectType);
         }
     } else {
         // None of the labels match what we are looking for, non-indicative of a failure though
-        return `Pull request #${context.payload.pull_request.id} does not have a label that matches ${labelName}, ignoring`;
+        return `Issue/PR #${baseObject.id} does not have a label that matches ${labelName}, ignoring`;
     }
 }
 
-async function createNewCard(octokit, columnId, prId){
-    console.log(`No card exists for the labeled pull request in the project. Attempting to create a card in column ${columnId}, for an pull request with the corresponding id #${prId}`);
+async function createNewCard(octokit, columnId, issueOrPrId, objectType){
+    console.log(`No card exists for the labeled ${objectType} in the project. Attempting to create a card in column ${columnId}, for the ${objectType} with the corresponding id #${issueOrPrId}`);
     await octokit.projects.createCard({
         column_id: columnId,
-        content_id: prId,
-        content_type: "PullRequest"
+        content_id: issueOrPrId,
+        content_type: objectType
     });
-    return `Successfully created a new card in column #${columnId} for an pull request with the corresponding id:${prId} !`;
+    return `Successfully created a new card in column #${columnId} for the ${objectType} with the corresponding id:${issueOrPrId} !`;
 }
 
 async function moveExistingCard(octokit, columnId, cardId){
-    console.log(`A card already exists for the pull request. Attempting to move card #${cardId} to column #${columnId}`);
+    console.log(`A card already exists for the issue. Attempting to move card #${cardId} to column #${columnId}`);
     await octokit.projects.moveCard({
         card_id: cardId,
         position: "top",
@@ -102,15 +98,7 @@ async function moveExistingCard(octokit, columnId, cardId){
     return `Succesfully moved card #${cardId} to column #${columnId} !`;
 }
 
-async function deleteExistingCard(octokit, columnId, cardId){
-    console.log(`A card already exists for the pull request. Attempting to delete card #${cardId}`);
-    await octokit.projects.deleteCard({
-        card_id: cardId
-    });
-    return `Succesfully deleted card #${cardId} !`;
-}
-
-async function tryGetColumnAndCardInformation(columnName, projectUrl, token, prDatabaseId){
+async function tryGetColumnAndCardInformation(columnName, projectUrl, token, issueOrPrDatabaseId){
     // if org project, we need to extract the org name
     // if repo project, need repo owner and name
     var columnId = null;
@@ -130,12 +118,12 @@ async function tryGetColumnAndCardInformation(columnName, projectUrl, token, prD
             if(name == columnName){
                 columnId = columnNode.databaseId;
             }
-            // check each column if there is a card that exists for the pull request
+            // check each column if there is a card that exists for the issue
             columnNode.cards.edges.forEach(function(card){
                 // card level
                 if (card.node.content != null){
-                    // only pull requests and pull requests have content
-                    if(card.node.content.databaseId == prDatabaseId){
+                    // only issues and pull requests have content
+                    if(card.node.content.databaseId == issueOrPrDatabaseId){
                         cardId = card.node.databaseId;
                         currentColumnName = columnNode.name;
                     }
@@ -153,12 +141,12 @@ async function tryGetColumnAndCardInformation(columnName, projectUrl, token, prD
             if(name == columnName){
                 columnId = columnNode.databaseId;
             }
-            // check each column if there is a card that exists for the pull request
+            // check each column if there is a card that exists for the issue
             columnNode.cards.edges.forEach(function(card){
                 // card level
                 if (card.node.content != null){
-                    // only pull requests and pull requests have content
-                    if(card.node.content.databaseId == prDatabaseId){
+                    // only issues and pull requests have content
+                    if(card.node.content.databaseId == issueOrPrDatabaseId){
                         cardId = card.node.databaseId;
                         currentColumnName = columnNode.name;
                     }
@@ -189,6 +177,10 @@ async function getOrgInformation(organizationLogin, projectNumber, token){
                                     node {
                                         databaseId
                                             content {
+                                                ... on Issue {
+                                                    databaseId
+                                                    number
+                                                }
                                                 ... on PullRequest {
                                                     databaseId
                                                     number
@@ -232,6 +224,10 @@ async function getRepoInformation(repositoryOwner, repositoryName, projectNumber
                                     node {
                                         databaseId
                                             content {
+                                                ... on Issue {
+                                                    databaseId
+                                                    number
+                                                }
                                                 ... on PullRequest {
                                                     databaseId
                                                     number
@@ -243,7 +239,7 @@ async function getRepoInformation(repositoryOwner, repositoryName, projectNumber
                             }
                         }
                     }
-                }
+                }        
             }`, {
             ownerVariable: repositoryOwner,
             nameVariable: repositoryName,
@@ -258,8 +254,8 @@ async function getRepoInformation(repositoryOwner, repositoryName, projectNumber
 run()
     .then(
         (response) => { console.log(`Finished running: ${response}`); },
-        (error) => {
+        (error) => { 
             console.log(`#ERROR# ${error}`);
-            process.exit(1);
+            process.exit(1); 
         }
     );
